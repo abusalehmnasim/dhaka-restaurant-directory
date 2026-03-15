@@ -9,8 +9,7 @@ print("Starting data collection...")
 print("Please wait, this may take 30-60 seconds.\n")
 
 # ── STEP 1: Fetch data ─────────────────────────────────────────────────────────
-overpass_url = "https://overpass-api.de/api/interpreter"
-
+overpass_url = "https://overpass.kumi.systems/api/interpreter"
 query = """
 [out:json][timeout:90];
 (
@@ -181,6 +180,7 @@ for element in data["elements"]:
         "OSM Rating"    : rating if rating > 0 else "N/A",
         "Latitude"      : lat,
         "Longitude"     : lon,
+        "Google Maps"   : f"https://www.google.com/maps?q={lat},{lon}" if lat and lon else "N/A",
     })
 
 
