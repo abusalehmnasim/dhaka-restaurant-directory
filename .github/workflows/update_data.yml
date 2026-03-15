@@ -2,8 +2,8 @@ name: Weekly Data Update
 
 on:
   schedule:
-    - cron: "0 0 * * 1"  # Every Monday at midnight UTC
-  workflow_dispatch:       # Also allows manual trigger from GitHub
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
 
 jobs:
   update:
@@ -19,8 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install requests pandas openpyxl matplotlib folium
+        run: pip install requests pandas openpyxl matplotlib folium
 
       - name: Run data collection
         run: python main.py
@@ -35,17 +34,3 @@ jobs:
           git add dhaka_restaurants.csv dhaka_restaurants.xlsx charts/ dhaka_restaurants_map.html
           git diff --staged --quiet || git commit -m "Auto-update: $(date '+%Y-%m-%d')"
           git push
-```
-
----
-
-## Step 3: Add a `requirements.txt` file
-
-GitHub Actions needs to know which libraries to install. Create a new file called `requirements.txt` in your project folder:
-```
-requests
-pandas
-openpyxl
-matplotlib
-folium
-python-telegram-bot
