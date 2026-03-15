@@ -1,3 +1,6 @@
+## 🌐 Live Demo
+👉 [View the Live Dashboard](https://dhaka-restaurant-directory-dulhlwyc5cbjwfxkympn6q.streamlit.app)
+
 # 🍽️ Dhaka Restaurant Directory
 
 A Python data collection and analysis project that compiles **2,000+ food places** across Dhaka city using free, open-source data — no paid API required.
