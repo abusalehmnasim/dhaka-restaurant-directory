@@ -350,3 +350,132 @@ else:
         summary["date"] = summary["date"].dt.strftime("%Y-%m-%d")
         summary.columns = ["Date", "Total", "Restaurants", "Cafes", "Fast Food", "Weekly Change"]
         st.dataframe(summary, use_container_width=True)
+        st.divider()
+
+# ── User Ratings System ────────────────────────────────────────────────────────
+st.subheader("⭐ Rate a Restaurant")
+
+import gspread
+from google.oauth2.service_account import Credentials
+import json
+
+# Load credentials
+def get_sheet():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    try:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("Dhaka Restaurant Ratings").sheet1
+        return sheet
+    except Exception as e:
+        return None
+
+sheet = get_sheet()
+
+if sheet is None:
+    st.warning("⚠️ Ratings system unavailable — credentials not found.")
+else:
+    tab_rate, tab_view = st.tabs(["✍️ Submit a Rating", "📊 View All Ratings"])
+
+    with tab_rate:
+        st.markdown("Found a restaurant in our directory? Rate it!")
+
+        # Restaurant name input with autocomplete from dataset
+        all_names = sorted(df["Name"].unique().tolist())
+        selected_restaurant = st.selectbox("Select Restaurant", all_names, key="rate_restaurant")
+
+        # Show restaurant details
+        resto_info = df[df["Name"] == selected_restaurant].iloc[0]
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.markdown(f"**Type:** {resto_info['Type']}")
+            st.markdown(f"**Area:** {resto_info['Area']}")
+        with col_info2:
+            st.markdown(f"**Cuisine:** {resto_info['Cuisine']}")
+            st.markdown(f"**Address:** {resto_info['Address']}")
+
+        # Rating input
+        rating = st.slider("Your Rating", min_value=1, max_value=5, value=3, key="rating_slider")
+        stars = "⭐" * rating
+        st.markdown(f"Your rating: {stars}")
+
+        # Comment input
+        comment = st.text_area("Your Comment (optional)", placeholder="How was the food? Service? Ambiance?", key="rating_comment")
+
+        if st.button("Submit Rating", key="submit_rating"):
+            if not comment:
+                comment = "No comment"
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            try:
+                sheet.append_row([
+                    selected_restaurant,
+                    str(resto_info["Type"]),
+                    str(resto_info["Area"]),
+                    rating,
+                    comment,
+                    timestamp
+                ])
+                st.success(f"✅ Thank you! Your {rating}-star rating for **{selected_restaurant}** has been saved.")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Failed to save rating: {e}")
+
+    with tab_view:
+        st.markdown("### All Submitted Ratings")
+
+        try:
+            all_ratings = sheet.get_all_records()
+
+            if not all_ratings:
+                st.info("No ratings submitted yet. Be the first to rate a restaurant!")
+            else:
+                ratings_df = pd.DataFrame(all_ratings)
+                ratings_df.columns = ["Restaurant", "Type", "Area", "Rating", "Comment", "Timestamp"]
+
+                # Summary stats
+                total_ratings = len(ratings_df)
+                avg_rating = ratings_df["Rating"].mean()
+                top_rated = ratings_df.groupby("Restaurant")["Rating"].mean().idxmax()
+
+                r1, r2, r3 = st.columns(3)
+                r1.metric("Total Ratings", total_ratings)
+                r2.metric("Average Rating", f"{avg_rating:.1f} ⭐")
+                r3.metric("Top Rated", top_rated)
+
+                # Top rated restaurants chart
+                avg_by_resto = (
+                    ratings_df.groupby("Restaurant")["Rating"]
+                    .agg(["mean", "count"])
+                    .reset_index()
+                )
+                avg_by_resto.columns = ["Restaurant", "Avg Rating", "Count"]
+                avg_by_resto = avg_by_resto[avg_by_resto["Count"] >= 1].sort_values("Avg Rating", ascending=False).head(10)
+
+                if not avg_by_resto.empty:
+                    st.markdown("### 🏆 Top Rated Restaurants")
+                    fig_ratings = px.bar(
+                        avg_by_resto,
+                        x="Avg Rating", y="Restaurant",
+                        orientation="h",
+                        color="Avg Rating",
+                        color_continuous_scale="Greens",
+                        text="Count",
+                        height=400
+                    )
+                    fig_ratings.update_layout(coloraxis_showscale=False)
+                    st.plotly_chart(fig_ratings, use_container_width=True)
+
+                # Full ratings table
+                st.markdown("### 📋 All Reviews")
+                st.dataframe(
+                    ratings_df.sort_values("Timestamp", ascending=False),
+                    use_container_width=True,
+                    height=400
+                )
+
+        except Exception as e:
+            st.error(f"Could not load ratings: {e}")
