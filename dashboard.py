@@ -382,6 +382,7 @@ def get_sheet():
     except Exception as e:
         return None
 
+sheet = get_sheet()
 if sheet is None:
     st.warning("⚠️ Ratings system unavailable — credentials not found.")
 else:
