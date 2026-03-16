@@ -366,14 +366,21 @@ def get_sheet():
         "https://www.googleapis.com/auth/drive"
     ]
     try:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
+        if "gcp_service_account" in st.secrets:
+            creds = Credentials.from_service_account_info(
+                dict(st.secrets["gcp_service_account"]),
+                scopes=scope
+            )
+        else:
+            creds = Credentials.from_service_account_file(
+                "credentials.json",
+                scopes=scope
+            )
         client = gspread.authorize(creds)
         sheet = client.open("Dhaka Restaurant Ratings").sheet1
         return sheet
     except Exception as e:
         return None
-
-sheet = get_sheet()
 
 if sheet is None:
     st.warning("⚠️ Ratings system unavailable — credentials not found.")
