@@ -238,3 +238,115 @@ if "nearest" in st.session_state:
         mime="text/csv",
         key="download_nearest"
     )
+    st.divider()
+
+# ── Trend Analysis ─────────────────────────────────────────────────────────────
+st.subheader("📈 Trend Analysis")
+
+snapshot_dir = "data/snapshots"
+
+if not os.path.exists(snapshot_dir):
+    st.info("📅 Trend data not available yet. Run main.py weekly to build historical data.")
+else:
+    snapshot_files = sorted([
+        f for f in os.listdir(snapshot_dir)
+        if f.endswith(".csv")
+    ])
+
+    if len(snapshot_files) < 2:
+        st.info(f"📅 Only {len(snapshot_files)} snapshot(s) collected so far. Come back next week for trend charts! First snapshot: {snapshot_files[0] if snapshot_files else 'none'}")
+    else:
+        # Load all snapshots
+        records = []
+        for fname in snapshot_files:
+            date_str = fname.replace(".csv", "")
+            try:
+                snap_df = pd.read_csv(
+                    os.path.join(snapshot_dir, fname),
+                    encoding="utf-8-sig"
+                )
+                text_cols = snap_df.select_dtypes(include="object").columns
+                snap_df[text_cols] = snap_df[text_cols].fillna("N/A")
+                records.append({
+                    "date"        : date_str,
+                    "total"       : len(snap_df),
+                    "restaurants" : len(snap_df[snap_df["Type"] == "Restaurant"]),
+                    "cafes"       : len(snap_df[snap_df["Type"] == "Cafe"]),
+                    "fast_food"   : len(snap_df[snap_df["Type"] == "Fast Food"]),
+                    "snap_df"     : snap_df
+                })
+            except Exception:
+                continue
+
+        trend_df = pd.DataFrame([{k: v for k, v in r.items() if k != "snap_df"} for r in records])
+        trend_df["date"] = pd.to_datetime(trend_df["date"])
+        trend_df = trend_df.sort_values("date")
+        trend_df["weekly_change"] = trend_df["total"].diff().fillna(0).astype(int)
+
+        # ── Chart 1: Total places over time ───────────────────────────────────
+        st.markdown("### 🏙️ Total Food Places Over Time")
+        fig_trend = px.line(
+            trend_df, x="date", y="total",
+            markers=True,
+            labels={"date": "Date", "total": "Total Places"},
+            color_discrete_sequence=["#FF6B6B"]
+        )
+        fig_trend.update_traces(line_width=3, marker_size=8)
+        fig_trend.update_layout(hovermode="x unified")
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        # ── Chart 2: Type breakdown over time ─────────────────────────────────
+        st.markdown("### 🍽️ Type Breakdown Over Time")
+        type_trend = trend_df[["date", "restaurants", "cafes", "fast_food"]].melt(
+            id_vars="date",
+            var_name="Type",
+            value_name="Count"
+        )
+        type_trend["Type"] = type_trend["Type"].map({
+            "restaurants": "Restaurant",
+            "cafes": "Cafe",
+            "fast_food": "Fast Food"
+        })
+        fig_type = px.line(
+            type_trend, x="date", y="Count",
+            color="Type", markers=True,
+            color_discrete_map={
+                "Restaurant": "#FF6B6B",
+                "Cafe": "#4ECDC4",
+                "Fast Food": "#FFE66D"
+            }
+        )
+        fig_type.update_traces(line_width=2, marker_size=6)
+        st.plotly_chart(fig_type, use_container_width=True)
+
+        # ── Chart 3: Area growth ───────────────────────────────────────────────
+        st.markdown("### 📍 Area Growth (First vs Latest Snapshot)")
+        first_snap = records[0]["snap_df"]
+        last_snap  = records[-1]["snap_df"]
+
+        first_areas = first_snap["Area"].value_counts().rename("first")
+        last_areas  = last_snap["Area"].value_counts().rename("latest")
+
+        area_growth = pd.concat([first_areas, last_areas], axis=1).fillna(0)
+        area_growth["change"] = (area_growth["latest"] - area_growth["first"]).astype(int)
+        area_growth = area_growth[area_growth["change"] != 0].sort_values("change", ascending=False)
+
+        if area_growth.empty:
+            st.info("No area changes detected yet between snapshots.")
+        else:
+            fig_growth = px.bar(
+                area_growth.reset_index(),
+                x="index", y="change",
+                color="change",
+                color_continuous_scale="RdYlGn",
+                labels={"index": "Area", "change": "Change in Places"},
+            )
+            fig_growth.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(fig_growth, use_container_width=True)
+
+        # ── Weekly change table ────────────────────────────────────────────────
+        st.markdown("### 📋 Weekly Snapshot Summary")
+        summary = trend_df[["date", "total", "restaurants", "cafes", "fast_food", "weekly_change"]].copy()
+        summary["date"] = summary["date"].dt.strftime("%Y-%m-%d")
+        summary.columns = ["Date", "Total", "Restaurants", "Cafes", "Fast Food", "Weekly Change"]
+        st.dataframe(summary, use_container_width=True)

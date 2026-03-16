@@ -1,3 +1,5 @@
+import os
+import datetime
 import requests
 import pandas as pd
 import json
@@ -205,7 +207,14 @@ after = len(df)
 
 # ── STEP 5: Save main files ────────────────────────────────────────────────────
 df.to_csv("dhaka_restaurants.csv", index=False, encoding="utf-8-sig")
-
+# ── Save weekly snapshot for trend analysis ────────────────────────────────────
+import datetime
+snapshot_dir = "data/snapshots"
+os.makedirs(snapshot_dir, exist_ok=True)
+today = datetime.date.today().strftime("%Y-%m-%d")
+snapshot_path = f"{snapshot_dir}/{today}.csv"
+df.to_csv(snapshot_path, index=False, encoding="utf-8-sig")
+print(f"  -> Snapshot saved: {snapshot_path}")
 # Save Excel with multiple sheets
 with pd.ExcelWriter("dhaka_restaurants.xlsx", engine="openpyxl") as writer:
     df.to_excel(writer, sheet_name="All Places", index=False)
