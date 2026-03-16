@@ -37,7 +37,13 @@ all_cuisines = ["All"] + sorted(df[df["Cuisine"] != "N/A"]["Cuisine"].unique().t
 selected_cuisine = st.sidebar.selectbox("Cuisine", all_cuisines)
 
 name_search = st.sidebar.text_input("Search by Name", "")
-
+# Rating filter
+min_rating = st.sidebar.slider(
+    "Minimum Google Rating",
+    min_value=0.0, max_value=5.0,
+    value=0.0, step=0.5,
+    help="Filter by Google rating (0 = show all)"
+)
 filtered = df.copy()
 if selected_type != "All":
     filtered = filtered[filtered["Type"] == selected_type]
@@ -47,7 +53,8 @@ if selected_cuisine != "All":
     filtered = filtered[filtered["Cuisine"] == selected_cuisine]
 if name_search:
     filtered = filtered[filtered["Name"].str.contains(name_search, case=False, na=False)]
-
+if min_rating > 0:
+    filtered = filtered[pd.to_numeric(filtered.get("Google Rating", 0), errors="coerce").fillna(0) >= min_rating]
 # ── Header ─────────────────────────────────────────────────────────────────────
 st.title("🍽️ Dhaka Restaurant Directory")
 st.markdown("Interactive dashboard of **2,000+ food places** across Dhaka city — built with OpenStreetMap data.")
@@ -148,7 +155,77 @@ st.download_button(
 st.caption("Data source: OpenStreetMap via Overpass API | Updated weekly via GitHub Actions")
 
 st.divider()
+st.divider()
 
+# ── Ratings Leaderboard ────────────────────────────────────────────────────────
+st.subheader("🏆 Top Rated Restaurants")
+st.markdown("Based on Google ratings from manually researched data.")
+
+if "Google Rating" not in df.columns:
+    st.info("No rating data available yet.")
+else:
+    rated_df = df.copy()
+    rated_df["Google Rating"] = pd.to_numeric(rated_df["Google Rating"], errors="coerce")
+    rated_df["Google Reviews"] = pd.to_numeric(
+        rated_df["Google Reviews"].astype(str).str.replace(",", ""),
+        errors="coerce"
+    )
+
+    rated_only = rated_df.dropna(subset=["Google Rating"]).copy()
+    rated_only = rated_only[rated_only["Google Rating"] > 0]
+
+    if rated_only.empty:
+        st.info("No rated places found in current data.")
+    else:
+        # KPI row
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Rated Places", len(rated_only))
+        r2.metric("Avg Google Rating", f"{rated_only['Google Rating'].mean():.2f} ⭐")
+        r3.metric("Highest Rated", f"{rated_only['Google Rating'].max()} ⭐")
+        r4.metric("Most Reviewed", f"{int(rated_only['Google Reviews'].max()):,}")
+
+        lboard_col, pie_col = st.columns(2)
+
+        with lboard_col:
+            st.markdown("### 🥇 Top 20 by Rating")
+            top20 = rated_only.nlargest(20, "Google Rating")[
+                ["Name", "Area", "Cuisine", "Google Rating", "Google Reviews", "Price Range"]
+            ].reset_index(drop=True)
+            top20.index += 1
+            top20["Google Reviews"] = top20["Google Reviews"].apply(
+                lambda x: f"{int(x):,}" if pd.notna(x) else "N/A"
+            )
+            st.dataframe(top20, use_container_width=True, height=450)
+
+        with pie_col:
+            st.markdown("### 📊 Rating Distribution")
+            bins = [0, 3.0, 3.5, 4.0, 4.5, 5.0]
+            labels = ["Below 3", "3.0-3.5", "3.5-4.0", "4.0-4.5", "4.5-5.0"]
+            rated_only["Rating Band"] = pd.cut(
+                rated_only["Google Rating"],
+                bins=bins, labels=labels, include_lowest=True
+            )
+            band_counts = rated_only["Rating Band"].value_counts().sort_index().reset_index()
+            band_counts.columns = ["Rating Band", "Count"]
+            fig_bands = px.bar(
+                band_counts, x="Rating Band", y="Count",
+                color="Count",
+                color_continuous_scale="Greens",
+                height=450
+            )
+            fig_bands.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(fig_bands, use_container_width=True)
+
+        # Most reviewed
+        st.markdown("### 🔥 Most Reviewed (Popular Places)")
+        popular = rated_only.nlargest(10, "Google Reviews")[
+            ["Name", "Area", "Cuisine", "Google Rating", "Google Reviews", "Price Range", "Special Notes"]
+        ].reset_index(drop=True)
+        popular.index += 1
+        popular["Google Reviews"] = popular["Google Reviews"].apply(
+            lambda x: f"{int(x):,}" if pd.notna(x) else "N/A"
+        )
+        st.dataframe(popular, use_container_width=True)
 # ── Nearest Restaurant Finder ──────────────────────────────────────────────────
 st.subheader("📍 Nearest Restaurant Finder")
 st.markdown("Enter your location coordinates to find the closest restaurants.")
